@@ -4,6 +4,9 @@ use std::fs::File;
 use dirs::home_dir;
 use crate::error::AppError;
 use crate::config::{PartialConfig, SSHConfig};
+use crate::services::RemoteRepo;
+use crate::services::LocalRepo;
+use crate::merge_configs;
 
 use super::CommandRunner;
 
@@ -34,26 +37,11 @@ impl InitCommand {
 
         Ok(
             SSHConfig {
-                key_path:
-                    self.key_path.clone()
-                    .or(partial.key_path)
-                    .ok_or(AppError::MissingArgument("key_path".into()))?,
-                ssh_username:
-                    self.ssh_username.clone()
-                    .or(partial.ssh_username)
-                    .ok_or(AppError::MissingArgument("ssh_username".into()))?,
-                ssh_server:
-                    self.ssh_server.clone()
-                    .or(partial.ssh_server)
-                    .ok_or(AppError::MissingArgument("ssh_server".into()))?,
-                ssh_port:
-                    self.ssh_port.clone()
-                    .or(partial.ssh_port)
-                    .ok_or(AppError::MissingArgument("ssh_port".into()))?,
-                remote_repo_path:
-                    self.remote_repo_path.clone()
-                    .or(partial.remote_repo_path)
-                    .ok_or(AppError::MissingArgument("remote_repo_path".into()))?,
+                key_path: merge_configs!(self, partial, key_path)?,
+                ssh_username: merge_configs!(self, partial, ssh_username)?,
+                ssh_server: merge_configs!(self, partial, ssh_server)?,
+                ssh_port: merge_configs!(self, partial, ssh_port)?,
+                remote_repo_path: merge_configs!(self, partial, remote_repo_path)?,
             }
         )
     }
@@ -61,8 +49,19 @@ impl InitCommand {
 
 impl CommandRunner for InitCommand {
     fn execute(&self) -> Result<(), AppError> {
-        let _cfg = self.build_ssh_config()?;
-        println!("TODO implement InitCommand");
+        let cfg = self.build_ssh_config()?;
+
+        // Extract repo name
+        let path = std::env::current_dir().map_err(|_| AppError::CannotAccessRunningDir)?;
+        let repo_name = 
+            path.file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| AppError::CannotAccessRunningDir)?;
+
+        RemoteRepo::create(repo_name, &cfg)?;
+        LocalRepo::init()?; // TODO should we delete remote if this fails?
+        LocalRepo::set_remote(&repo_name, &cfg)?;
+
         Ok(())
     }
 }

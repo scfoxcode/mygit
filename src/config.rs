@@ -48,3 +48,12 @@ pub struct SSHConfig {
     pub ssh_port: String,
     pub remote_repo_path: String,
 }
+
+#[macro_export]
+macro_rules! merge_configs {
+    ($a:expr, $b:expr, $field:ident) => {
+        $a.$field.clone()
+        .or_else(|| $b.$field.clone())
+        .ok_or_else(|| AppError::MissingArgument(stringify!($field).to_string()))
+    }
+}
